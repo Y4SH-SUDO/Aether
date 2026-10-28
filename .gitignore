@@ -27,3 +27,5 @@ dist-ssr
 *.csv
 *.pdf
 /private-data/
+!sample-data/*.csv
+!sample-data/*.pdf
