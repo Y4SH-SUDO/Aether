@@ -24,9 +24,13 @@ export function accountBalance(
     .reduce((balance, transaction) => balance + transaction.amount, account.openingBalance);
 }
 
-export function totalBalance(accounts: Account[], transactions: Transaction[]): Money {
+export function totalBalance(
+  accounts: Account[],
+  transactions: Transaction[],
+  asOf?: string,
+): Money {
   return accounts.reduce(
-    (total, account) => total + accountBalance(account, transactions),
+    (total, account) => total + accountBalance(account, transactions, asOf),
     0,
   );
 }
