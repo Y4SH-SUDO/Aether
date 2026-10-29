@@ -1,35 +1,37 @@
 import { useEffect, useRef, useState } from 'react';
+import { useReducedMotion } from './useReducedMotion';
 
 export function useCountUp(target: number, duration = 700): number {
+  const reducedMotion = useReducedMotion();
   const [value, setValue] = useState(target);
-  const previous = useRef(target);
+  const displayedValue = useRef(target);
 
   useEffect(() => {
-    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    if (reduceMotion) {
-      previous.current = target;
-      setValue(target);
+    if (reducedMotion) {
+      displayedValue.current = target;
       return;
     }
 
-    const start = previous.current;
+    const start = displayedValue.current;
     const startedAt = performance.now();
     let frame = 0;
 
     const animate = (now: number) => {
       const progress = Math.min((now - startedAt) / duration, 1);
       const eased = 1 - (1 - progress) ** 3;
-      setValue(start + (target - start) * eased);
+      const nextValue = start + (target - start) * eased;
+      displayedValue.current = nextValue;
+      setValue(nextValue);
       if (progress < 1) {
         frame = requestAnimationFrame(animate);
       } else {
-        previous.current = target;
+        displayedValue.current = target;
       }
     };
 
     frame = requestAnimationFrame(animate);
     return () => cancelAnimationFrame(frame);
-  }, [duration, target]);
+  }, [duration, reducedMotion, target]);
 
-  return value;
+  return reducedMotion ? target : value;
 }

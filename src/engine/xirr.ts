@@ -27,7 +27,7 @@ export function xirrPercent(flows: CashFlow[]): number | null {
   let low = -0.99;
   let high = 10;
   let lowValue = value(low);
-  let highValue = value(high);
+  const highValue = value(high);
   if (lowValue * highValue > 0) return null;
   for (let i = 0; i < 200; i += 1) {
     const middle = (low + high) / 2;
@@ -39,7 +39,6 @@ export function xirrPercent(flows: CashFlow[]): number | null {
     }
     if (lowValue * middleValue <= 0) {
       high = middle;
-      highValue = middleValue;
     } else {
       low = middle;
       lowValue = middleValue;

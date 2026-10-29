@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { AetherDB } from '../../db/database';
 import type { Account, Category, Transaction } from '../../db/types';
 import { dataMonthRange } from '../../engine/dashboard';
@@ -14,21 +14,50 @@ export function Transactions({ database, onWritten }: { database: AetherDB; onWr
   const [search, setSearch] = useState('');
   const [form, setForm] = useState({ accountId: '', date: '', description: '', rupees: '', direction: 'out' as 'in' | 'out', kind: 'expense' as Transaction['kind'], categoryId: '' });
   const [error, setError] = useState('');
-  const load = async () => {
-    const [nextAccounts, nextCategories, nextTransactions] = await Promise.all([
-      database.accounts.toArray(), database.categories.toArray(), database.transactions.toArray(),
-    ]);
+  const load = useCallback(() => Promise.all([
+    database.accounts.toArray(), database.categories.toArray(), database.transactions.toArray(),
+  ]), [database]);
+  const request = useRef(0);
+  const applyLoaded = (nextAccounts: Account[], nextCategories: Category[], nextTransactions: Transaction[]) => {
     setAccounts(nextAccounts); setCategories(nextCategories); setTransactions(nextTransactions);
-    if (!month) setMonth(dataMonthRange(nextTransactions)?.last ?? '');
-    if (!form.accountId) setForm((current) => ({ ...current, accountId: nextAccounts[0]?.id ?? '' }));
+    const accountIds = new Set(nextAccounts.map((account) => account.id));
+    const categoryIds = new Set(nextCategories.map((category) => category.id));
+    setMonth((current) => current || dataMonthRange(nextTransactions)?.last || '');
+    setForm((current) => ({
+      ...current,
+      accountId: current.accountId && accountIds.has(current.accountId) ? current.accountId : nextAccounts[0]?.id ?? '',
+      categoryId: current.categoryId && categoryIds.has(current.categoryId) ? current.categoryId : '',
+    }));
   };
-  useEffect(() => { void load(); }, [database]);
+  useEffect(() => {
+    const requestId = ++request.current;
+    void load().then(([nextAccounts, nextCategories, nextTransactions]) => {
+      if (requestId !== request.current) return;
+      applyLoaded(nextAccounts, nextCategories, nextTransactions);
+      setError('');
+    }).catch((e: unknown) => {
+      if (requestId === request.current) setError(e instanceof Error ? e.message : 'Could not load transactions');
+    });
+    return () => { request.current += 1; };
+  }, [load]);
+  const refresh = async () => {
+    const requestId = ++request.current;
+    try {
+      const [nextAccounts, nextCategories, nextTransactions] = await load();
+      if (requestId === request.current) {
+        applyLoaded(nextAccounts, nextCategories, nextTransactions);
+        setError('');
+      }
+    } catch (e: unknown) {
+      if (requestId === request.current) setError(e instanceof Error ? e.message : 'Could not load transactions');
+    }
+  };
   const range = dataMonthRange(transactions);
   const rows = useMemo(() => transactions.filter((tx) => tx.date.startsWith(month) && tx.description.toLowerCase().includes(search.toLowerCase())), [transactions, month, search]);
   const save = async () => {
     try {
       const tx = buildTransaction({ ...form, categoryId: form.categoryId || null });
-      await database.transactions.add(tx); setError(''); await load(); onWritten();
+      await database.transactions.add(tx); await refresh(); onWritten();
     } catch (e) { setError(e instanceof Error ? e.message : 'Could not save transaction'); }
   };
   return (
@@ -60,7 +89,7 @@ export function Transactions({ database, onWritten }: { database: AetherDB; onWr
         {error ? <p className="mt-3 text-sm italic text-muted">{error}</p> : null}
         <button type="button" onClick={() => void save()} className="mt-5 text-sm underline underline-offset-4">Add transaction</button>
       </div>
-      <TransferForm database={database} accounts={accounts} onWritten={async () => { await load(); onWritten(); }} />
+      <TransferForm key={accounts.map((account) => account.id).join('|')} database={database} accounts={accounts} onWritten={async () => { await refresh(); onWritten(); }} />
     </section>
   );
 }
@@ -70,9 +99,11 @@ function TransferForm({ database, accounts, onWritten }: { database: AetherDB; a
   const [to, setTo] = useState(accounts[1]?.id ?? '');
   const [date, setDate] = useState('');
   const [rupees, setRupees] = useState('');
+  const fromValue = accounts.some((account) => account.id === from) ? from : accounts[0]?.id ?? '';
+  const toValue = accounts.some((account) => account.id === to) ? to : accounts[1]?.id ?? accounts[0]?.id ?? '';
   return <div className="border-t border-rule pt-7"><h2 className="text-xs uppercase tracking-[0.18em] text-muted">Move money between accounts</h2><div className="mt-5 grid gap-3 sm:grid-cols-2">
-    <select value={from} onChange={(e) => setFrom(e.target.value)} className="border-b border-rule bg-transparent py-2">{accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select>
-    <select value={to} onChange={(e) => setTo(e.target.value)} className="border-b border-rule bg-transparent py-2">{accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select>
+    <select value={fromValue} onChange={(e) => setFrom(e.target.value)} className="border-b border-rule bg-transparent py-2">{accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select>
+    <select value={toValue} onChange={(e) => setTo(e.target.value)} className="border-b border-rule bg-transparent py-2">{accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select>
     <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="border-b border-rule bg-transparent py-2" /><input placeholder="Amount in rupees" value={rupees} onChange={(e) => setRupees(e.target.value)} className="border-b border-rule bg-transparent py-2" />
-  </div><button type="button" onClick={async () => { const pair = createTransferPair({ fromAccountId: from, toAccountId: to, date, rupees }); await database.transactions.bulkAdd(pair); await onWritten(); }} className="mt-5 text-sm underline underline-offset-4">Move money</button></div>;
+  </div><button type="button" onClick={async () => { const pair = createTransferPair({ fromAccountId: fromValue, toAccountId: toValue, date, rupees }); await database.transactions.bulkAdd(pair); await onWritten(); }} className="mt-5 text-sm underline underline-offset-4">Move money</button></div>;
 }

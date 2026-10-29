@@ -5,9 +5,9 @@ import {
   Tooltip,
   XAxis,
 } from 'recharts';
-import { useEffect, useState } from 'react';
 import type { RecentMonth } from '../engine/dashboard';
 import { formatRupees } from '../engine/format';
+import { useReducedMotion } from '../hooks/useReducedMotion';
 
 interface MoneyInOutChartProps {
   months: RecentMonth[];
@@ -35,11 +35,7 @@ function ChartTooltip({ active, payload, label }: ChartTooltipProps) {
 }
 
 export function MoneyInOutChart({ months, selectedMonth }: MoneyInOutChartProps) {
-  const [reducedMotion, setReducedMotion] = useState(false);
-
-  useEffect(() => {
-    setReducedMotion(window.matchMedia('(prefers-reduced-motion: reduce)').matches);
-  }, []);
+  const reducedMotion = useReducedMotion();
 
   return (
     <div className="w-full">
