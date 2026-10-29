@@ -27,5 +27,6 @@ dist-ssr
 *.csv
 *.pdf
 /private-data/
+aether-backup-*.json
 !sample-data/*.csv
 !sample-data/*.pdf

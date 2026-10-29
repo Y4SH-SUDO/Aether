@@ -78,7 +78,8 @@ export function buildSampleData(): SampleData {
   const loan: Loan = {
     id: 'loan-home',
     name: 'Example Home Loan',
-    lender: 'Example Bank',
+    lender: 'Sample Bank',
+    product: 'education',
     principal: 10000000,
     annualRatePercent: 12,
     startDate: '2026-01-01',

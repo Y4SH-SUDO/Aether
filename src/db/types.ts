@@ -65,5 +65,6 @@ export interface Loan {
   startDate: ISODate;
   tenureMonths: number;
   emi: Money;
+  product?: 'home' | 'education' | 'personal' | 'vehicle' | 'other';
   knownOutstanding?: { amount: Money; asOf: ISODate };
 }
