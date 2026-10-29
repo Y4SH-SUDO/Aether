@@ -3,7 +3,7 @@ import type { AetherDB } from '../../db/database';
 import type { Investment, InvestmentTrade, Valuation } from '../../db/types';
 import { investmentSummary } from '../../engine/investments';
 import { formatRupees } from '../../engine/format';
-import { parseRupees } from '../../engine/money';
+import { parseOptionalRupees, parseRupees } from '../../engine/money';
 
 export function Investments({ database, onWritten }: { database: AetherDB; onWritten: () => void }) {
   const [investments, setInvestments] = useState<Investment[]>([]);
@@ -47,7 +47,7 @@ export function Investments({ database, onWritten }: { database: AetherDB; onWri
     }
   };
   const saveInvestment = async () => { try { await database.investments.add({ id: crypto.randomUUID(), name: form.name.trim(), type: form.type, symbol: form.symbol.trim() || undefined }); await refresh(); onWritten(); } catch (e: unknown) { setError(e instanceof Error ? e.message : 'Could not save investment'); } };
-  const saveTrade = async () => { try { await database.trades.add({ id: crypto.randomUUID(), investmentId: trade.investmentId, date: trade.date, kind: trade.kind, units: Number(trade.units), amount: parseRupees(trade.amount), fees: parseRupees(trade.fees || '0') }); await refresh(); onWritten(); } catch (e: unknown) { setError(e instanceof Error ? e.message : 'Could not save trade'); } };
+  const saveTrade = async () => { try { await database.trades.add({ id: crypto.randomUUID(), investmentId: trade.investmentId, date: trade.date, kind: trade.kind, units: Number(trade.units), amount: parseRupees(trade.amount), fees: parseOptionalRupees(trade.fees) }); await refresh(); onWritten(); } catch (e: unknown) { setError(e instanceof Error ? e.message : 'Could not save trade'); } };
   const savePrice = async () => { try { await database.valuations.add({ id: crypto.randomUUID(), investmentId: price.investmentId, date: price.date, unitPrice: parseRupees(price.unitPrice), quality: 'manual' }); await refresh(); onWritten(); } catch (e: unknown) { setError(e instanceof Error ? e.message : 'Could not save valuation'); } };
   const summary = investmentSummary(investments, trades, valuations, '2026-12');
   return <section className="space-y-8"><h2 className="text-xs uppercase tracking-[0.18em] text-muted">Investments</h2>{error ? <p className="text-sm italic text-muted">{error}</p> : null}{investments.length === 0 ? <p className="text-sm italic text-muted">No investments yet.</p> : <div className="divide-y divide-rule border-y border-rule">{summary.holdings.map((holding) => <button type="button" key={holding.investmentId} onClick={() => setSelected(holding.investmentId)} className="flex w-full justify-between py-4 text-left"><span>{holding.name} <span className="text-muted">· {investments.find((item) => item.id === holding.investmentId)?.type} · {holding.units} units</span></span><span>{formatRupees(holding.value)}</span></button>)}</div>}

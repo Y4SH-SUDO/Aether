@@ -13,3 +13,9 @@ export function parseRupees(text: string, options: { allowNegative?: boolean } =
   if (paise === 0 && value !== '0.00') throw new Error('Invalid rupee amount');
   return negative ? -paise : paise;
 }
+
+export function parseOptionalRupees(text: string): number {
+  const normalized = text.trim();
+  if (!normalized || normalized === '0') return 0;
+  return parseRupees(normalized);
+}

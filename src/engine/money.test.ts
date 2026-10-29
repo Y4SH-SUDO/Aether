@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseRupees } from './money';
+import { parseOptionalRupees, parseRupees } from './money';
 
 describe('parseRupees', () => {
   it.each([
@@ -21,5 +21,13 @@ describe('parseRupees', () => {
 
   it('rejects negatives by default', () => {
     expect(() => parseRupees('-5')).toThrow();
+  });
+
+  it.each(['', '0', '0.00'])('parses optional fee %s as zero', (text) => {
+    expect(parseOptionalRupees(text)).toBe(0);
+  });
+
+  it.each(['abc', '-1', '12.345'])('rejects invalid optional fee %s', (text) => {
+    expect(() => parseOptionalRupees(text)).toThrow();
   });
 });

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { CategoryBars } from '../../components/CategoryBars';
 import { MoneyInOutChart } from '../../components/MoneyInOutChart';
 import { MonthSwitcher } from '../../components/MonthSwitcher';
@@ -60,16 +60,18 @@ function useTheme() {
   return { theme, toggle: () => setTheme((current) => current === 'dark' ? 'light' : 'dark') };
 }
 
-export function Dashboard({ database, isDemo }: { database: AetherDB; isDemo: boolean }) {
+export function Dashboard({ database, isDemo, onNavigate }: { database: AetherDB; isDemo: boolean; onNavigate?: (tab: 'transactions' | 'data') => void }) {
   const [data, setData] = useState<DemoData | null>(null);
+  const [error, setError] = useState('');
   const [month, setMonth] = useState<string | null>(null);
   const [direction, setDirection] = useState<'forward' | 'back'>('forward');
+  const [reload, setReload] = useState(0);
+  const request = useRef(0);
   const { theme, toggle } = useTheme();
 
   useEffect(() => {
-    let active = true;
-    void ensureDemoData().then(async () => {
-      if (isDemo) await ensureDemoData();
+    const requestId = ++request.current;
+    void (isDemo ? ensureDemoData() : Promise.resolve()).then(async () => {
       const [accounts, categories, transactions, loans, investments, trades, valuations] = await Promise.all([
         database.accounts.toArray(),
         database.categories.toArray(),
@@ -79,15 +81,16 @@ export function Dashboard({ database, isDemo }: { database: AetherDB; isDemo: bo
         database.trades.toArray(),
         database.valuations.toArray(),
       ]);
-      if (active) {
+      if (requestId === request.current) {
         setData({ accounts, categories, transactions, loans, investments, trades, valuations });
         setMonth(dataMonthRange(transactions)?.last ?? null);
+        setError('');
       }
+    }).catch(() => {
+      if (requestId === request.current) setError('Could not load dashboard data. Try again.');
     });
-    return () => {
-      active = false;
-    };
-  }, [database, isDemo]);
+    return () => { request.current += 1; };
+  }, [database, isDemo, reload]);
 
   const dashboard = data && month ? buildDashboard(data, month) : null;
   const range = data ? dataMonthRange(data.transactions) : null;
@@ -112,16 +115,28 @@ export function Dashboard({ database, isDemo }: { database: AetherDB; isDemo: bo
   const loanBorrowed = useCountUp(loans?.totalBorrowed ?? 0);
   const loanOwed = useCountUp(loans?.stillOwed ?? 0);
 
-  if (!data || !month || !dashboard) {
+  if (error) {
+    return <section className="border-t border-rule pt-8 text-sm text-muted" role="alert"><p>{error}</p><button type="button" onClick={() => { setError(''); setData(null); setReload((value) => value + 1); }} className="mt-4 underline underline-offset-4">Retry</button></section>;
+  }
+
+  if (!data) {
     return <main className="mx-auto max-w-2xl px-5 py-12 text-sm text-muted">Loading data…</main>;
   }
 
-  if (!isDemo && data.accounts.length === 0) {
+  if (!isDemo && (data.accounts.length === 0 || data.transactions.length === 0)) {
     return (
       <section className="border-t border-rule pt-8 text-base text-muted">
-        No data yet. Add an account in Data, then add or import transactions.
+        <p>No data yet. Add an account, add a transaction, import CSV data, or restore a backup in My Data.</p>
+        <div className="mt-5 flex flex-wrap gap-5 text-sm">
+          <button type="button" onClick={() => onNavigate?.('transactions')} className="underline underline-offset-4">Add a transaction</button>
+          <button type="button" onClick={() => onNavigate?.('data')} className="underline underline-offset-4">Import CSV or restore backup</button>
+        </div>
       </section>
     );
+  }
+
+  if (!month || !dashboard) {
+    return <main className="mx-auto max-w-2xl px-5 py-12 text-sm text-muted">No transactions are available for the dashboard yet.</main>;
   }
 
   const changeMonth = (nextMonth: string) => {
@@ -137,7 +152,7 @@ export function Dashboard({ database, isDemo }: { database: AetherDB; isDemo: bo
           <MonthSwitcher month={month} firstMonth={range.first} lastMonth={range.last} onChange={changeMonth} />
         ) : null}
       </header>
-      <p className="mt-4 text-sm italic text-muted">Demo data, not your real numbers</p>
+      {isDemo ? <p className="mt-4 text-sm italic text-muted">Demo data, not your real numbers</p> : null}
 
       <div key={month} className={direction === 'forward' ? 'month-forward' : 'month-back'}>
         <section className="fade-up mt-16 border-t border-rule pt-8" style={{ animationDelay: '70ms' }}>
