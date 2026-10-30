@@ -6,6 +6,13 @@ const rupeeFormatter = new Intl.NumberFormat('en-IN', {
   maximumFractionDigits: 0,
 });
 
-export function formatRupees(paise: Money): string {
-  return rupeeFormatter.format(paise / 100);
+const rupeeFormatterWithPaise = new Intl.NumberFormat('en-IN', {
+  style: 'currency',
+  currency: 'INR',
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+});
+
+export function formatRupees(paise: Money, options?: { showPaise?: boolean }): string {
+  return (options?.showPaise ? rupeeFormatterWithPaise : rupeeFormatter).format(paise / 100);
 }
