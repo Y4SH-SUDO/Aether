@@ -10,7 +10,7 @@ import { formatRupees } from '../../engine/format';
 
 const products = ['home', 'education', 'personal', 'vehicle', 'other'] as const;
 
-export function Loans({ database, onWritten }: { database: AetherDB; onWritten: () => void }) {
+export function Loans({ database, onWritten }: { database: AetherDB; onWritten: () => Promise<void> }) {
   const [loans, setLoans] = useState<Loan[]>([]);
   const [error, setError] = useState('');
   const [selected, setSelected] = useState<Loan | null>(null);
@@ -38,7 +38,7 @@ export function Loans({ database, onWritten }: { database: AetherDB; onWritten: 
       await database.loans.put({ id: selected?.id ?? crypto.randomUUID(), name: form.name.trim(), lender: form.lender.trim() || undefined, product: form.product, principal, annualRatePercent: Number(form.rate), startDate: form.startDate, tenureMonths: Number(form.tenure), emi, knownOutstanding: form.outstanding ? { amount: parseRupees(form.outstanding), asOf: form.asOf } : undefined });
       const nextLoans = await load();
       if (requestId === request.current) {
-        setSelected(null); setLoans(nextLoans); setError(''); onWritten();
+        setSelected(null); setLoans(nextLoans); setError(''); await onWritten();
       }
     } catch (e: unknown) { setError(e instanceof Error ? e.message : 'Could not save loan'); }
   };

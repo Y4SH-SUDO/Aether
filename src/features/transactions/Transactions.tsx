@@ -5,8 +5,10 @@ import { dataMonthRange } from '../../engine/dashboard';
 import { buildTransaction, createTransferPair } from '../../engine/transactionForm';
 import { formatRupees } from '../../engine/format';
 import { MonthSwitcher } from '../../components/MonthSwitcher';
+import { deleteTransaction, recordCreatedTransaction, restoreTransaction } from '../../db/activity';
+import { findPotentialDuplicates, type DuplicateCandidate } from '../../engine/duplicateDetection';
 
-export function Transactions({ database, onWritten }: { database: AetherDB; onWritten: () => void }) {
+export function Transactions({ database, onWritten }: { database: AetherDB; onWritten: () => Promise<void> }) {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -14,6 +16,11 @@ export function Transactions({ database, onWritten }: { database: AetherDB; onWr
   const [search, setSearch] = useState('');
   const [form, setForm] = useState({ accountId: '', date: '', description: '', rupees: '', direction: 'out' as 'in' | 'out', kind: 'expense' as Transaction['kind'], categoryId: '' });
   const [error, setError] = useState('');
+  const [status, setStatus] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [duplicate, setDuplicate] = useState<DuplicateCandidate | null>(null);
+  const [undoId, setUndoId] = useState<string | null>(null);
+  const [undoMessage, setUndoMessage] = useState('');
   const load = useCallback(() => Promise.all([
     database.accounts.toArray(), database.categories.toArray(), database.transactions.toArray(),
   ]), [database]);
@@ -54,11 +61,56 @@ export function Transactions({ database, onWritten }: { database: AetherDB; onWr
   };
   const range = dataMonthRange(transactions);
   const rows = useMemo(() => transactions.filter((tx) => tx.date.startsWith(month) && tx.description.toLowerCase().includes(search.toLowerCase())), [transactions, month, search]);
-  const save = async () => {
+  const save = async (force = false) => {
+    if (saving) return;
+    setSaving(true);
+    setStatus('');
     try {
       const tx = buildTransaction({ ...form, categoryId: form.categoryId || null });
-      await database.transactions.add(tx); await refresh(); onWritten();
+      const candidates = findPotentialDuplicates(tx, transactions);
+      if (candidates.length > 0 && !duplicate && !force) {
+        setDuplicate(candidates[0]);
+        setSaving(false);
+        return;
+      }
+      await database.transaction('rw', [database.transactions, database.audit], async () => {
+        await database.transactions.add(tx);
+        await recordCreatedTransaction(database, tx);
+      });
+      await refresh(); await onWritten();
+      setForm({ accountId: form.accountId, date: '', description: '', rupees: '', direction: 'out', kind: 'expense', categoryId: '' });
+      setStatus('Transaction added');
+      setError('');
     } catch (e) { setError(e instanceof Error ? e.message : 'Could not save transaction'); }
+    finally { setSaving(false); }
+  };
+  const remove = async (tx: Transaction) => {
+    try {
+      await deleteTransaction(database, tx);
+      await refresh();
+      await onWritten();
+      setUndoId(tx.id);
+      setUndoMessage(`Deleted “${tx.description}”. Undo is available briefly.`);
+      window.setTimeout(() => {
+        setUndoId((current) => current === tx.id ? null : current);
+        setUndoMessage((current) => current.startsWith('Deleted') ? 'Undo is no longer available for that transaction.' : current);
+      }, 10000);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not delete transaction');
+    }
+  };
+  const undo = async () => {
+    if (!undoId) return;
+    const restored = await restoreTransaction(database, undoId);
+    if (!restored) {
+      setUndoMessage('Undo is no longer available for that transaction.');
+      setUndoId(null);
+      return;
+    }
+    await refresh();
+    await onWritten();
+    setUndoId(null);
+    setUndoMessage('Transaction restored.');
   };
   return (
     <section className="space-y-10">
@@ -71,11 +123,11 @@ export function Transactions({ database, onWritten }: { database: AetherDB; onWr
         {rows.map((tx) => (
           <div key={tx.id} className="flex items-center justify-between gap-4 py-4 text-sm">
             <div><p>{tx.description}</p><p className="text-muted">{tx.date} · {categories.find((c) => c.id === tx.categoryId)?.name ?? 'Other'}</p></div>
-            <span>{tx.amount >= 0 ? '+' : '-'}{formatRupees(Math.abs(tx.amount))}</span>
+            <div className="flex items-center gap-3"><span>{tx.amount >= 0 ? '+' : '-'}{formatRupees(Math.abs(tx.amount))}</span><button type="button" onClick={() => void remove(tx)} className="text-muted underline underline-offset-4">Delete</button></div>
           </div>
         ))}
       </div>
-      <div className="border-t border-rule pt-7">
+      <form className="border-t border-rule pt-7" onSubmit={(event) => { event.preventDefault(); void save(); }}>
         <h2 className="text-xs uppercase tracking-[0.18em] text-muted">Add transaction</h2>
         <div className="mt-5 grid gap-3 sm:grid-cols-2">
           <select value={form.accountId} onChange={(e) => setForm({ ...form, accountId: e.target.value })} className="border-b border-rule bg-transparent py-2"><option value="">Account</option>{accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select>
@@ -86,10 +138,13 @@ export function Transactions({ database, onWritten }: { database: AetherDB; onWr
           <select value={form.kind} onChange={(e) => setForm({ ...form, kind: e.target.value as Transaction['kind'] })} className="border-b border-rule bg-transparent py-2"><option value="expense">Expense</option><option value="income">Income</option><option value="investment">Investment</option><option value="loan_payment">Loan payment</option></select>
           <select value={form.categoryId} onChange={(e) => setForm({ ...form, categoryId: e.target.value })} className="border-b border-rule bg-transparent py-2"><option value="">Category</option>{categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select>
         </div>
-        {error ? <p className="mt-3 text-sm italic text-muted">{error}</p> : null}
-        <button type="button" onClick={() => void save()} className="mt-5 text-sm underline underline-offset-4">Add transaction</button>
-      </div>
-      <TransferForm key={accounts.map((account) => account.id).join('|')} database={database} accounts={accounts} onWritten={async () => { await refresh(); onWritten(); }} />
+        {error ? <p className="mt-3 text-sm italic text-muted" role="alert">{error}</p> : null}
+        {status ? <p className="mt-3 text-sm text-muted" role="status">{status}</p> : null}
+        {duplicate ? <div className="mt-4 border border-rule p-3 text-sm" role="alert"><p>Possible duplicate: “{duplicate.transaction.description}” on {duplicate.transaction.date}, amount {formatRupees(Math.abs(duplicate.transaction.amount))}. Matched {duplicate.matchedFields.join(', ')}.</p><div className="mt-2 flex gap-4"><button type="button" className="underline underline-offset-4" onClick={() => { setDuplicate(null); void save(true); }}>Add anyway</button><button type="button" className="text-muted underline underline-offset-4" onClick={() => setDuplicate(null)}>Cancel</button></div></div> : null}
+        {undoMessage ? <p className="mt-3 text-sm text-muted" role="status">{undoMessage} {undoId ? <button type="button" onClick={() => void undo()} className="ml-2 underline underline-offset-4">Undo</button> : null}</p> : null}
+        <button type="submit" disabled={saving} className="mt-5 text-sm underline underline-offset-4 disabled:cursor-not-allowed disabled:text-muted">{saving ? 'Saving…' : 'Add transaction'}</button>
+      </form>
+      <TransferForm key={accounts.map((account) => account.id).join('|')} database={database} accounts={accounts} onWritten={async () => { await refresh(); await onWritten(); }} />
     </section>
   );
 }

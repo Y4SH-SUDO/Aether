@@ -5,6 +5,7 @@ import { Transactions } from './features/transactions/Transactions';
 import { Data } from './features/data/Data';
 import { Loans } from './features/loans/Loans';
 import { Investments } from './features/investments/Investments';
+import { createAutomaticBackup } from './db/backup';
 
 type Tab = 'overview' | 'transactions' | 'loans' | 'investments' | 'data';
 
@@ -14,27 +15,32 @@ function App() {
   const [revision, setRevision] = useState(0);
   const database = getActiveDb(mode);
   const changeMode = (next: DataMode) => {
+    if (next === mode) return;
+    if (!window.confirm('Switching datasets will discard any unsaved form input. Continue?')) return;
     setMode(next);
     setCurrentMode(next);
     setTab('overview');
   };
-  const onWritten = () => setRevision((value) => value + 1);
+  const onWritten = async () => {
+    await createAutomaticBackup(database, 'Meaningful data change');
+    setRevision((value) => value + 1);
+  };
   void revision;
   return (
     <main className="mx-auto min-h-screen max-w-2xl px-5 py-8 text-ink sm:px-8 sm:py-14">
       <header className="flex flex-wrap items-end justify-between gap-5 border-b border-rule pb-5">
         <h1 className="text-4xl leading-none sm:text-5xl">Àether</h1>
-        <div className="flex items-center gap-4 text-sm">
-          <button type="button" onClick={() => changeMode('demo')} className={mode === 'demo' ? 'underline underline-offset-4' : 'text-muted'}>Demo data</button>
-          <button type="button" onClick={() => changeMode('mine')} className={mode === 'mine' ? 'underline underline-offset-4' : 'text-muted'}>My data</button>
+        <div className="flex items-center gap-3 text-sm" aria-label="Dataset">
+          <button type="button" aria-pressed={mode === 'demo'} onClick={() => changeMode('demo')} className={`border border-rule px-3 py-1 ${mode === 'demo' ? 'bg-ink text-paper' : 'text-muted'}`}>Demo</button>
+          <button type="button" aria-pressed={mode === 'mine'} onClick={() => changeMode('mine')} className={`border border-rule px-3 py-1 ${mode === 'mine' ? 'bg-ink text-paper' : 'text-muted'}`}>My Data</button>
         </div>
         <nav className="flex w-full gap-5 text-sm" aria-label="Main navigation">
           {(['overview', 'transactions', 'loans', 'investments', 'data'] as const).map((item) => <button key={item} type="button" onClick={() => setTab(item)} className={tab === item ? 'underline underline-offset-4' : 'text-muted'}>{item[0].toUpperCase() + item.slice(1)}</button>)}
         </nav>
       </header>
-      {mode === 'demo' ? <p className="mt-4 text-sm italic text-muted">Demo data, not your real numbers</p> : null}
+      <p className="mt-4 text-sm italic text-muted">{mode === 'demo' ? 'Demo uses sample data.' : 'My Data uses your own local financial data.'}</p>
       <div className="mt-10">
-        {tab === 'overview' ? <Dashboard key={`${mode}-${revision}`} database={database} isDemo={mode === 'demo'} /> : null}
+        {tab === 'overview' ? <Dashboard key={`${mode}-${revision}`} database={database} isDemo={mode === 'demo'} onNavigate={setTab} /> : null}
         {tab === 'transactions' ? <Transactions database={database} onWritten={onWritten} /> : null}
         {tab === 'loans' ? <Loans database={database} onWritten={onWritten} /> : null}
         {tab === 'investments' ? <Investments database={database} onWritten={onWritten} /> : null}

@@ -31,6 +31,48 @@ export interface Transaction {
   quality: Quality;
 }
 
+export interface DeletedTransaction {
+  id: string;
+  transaction: Transaction;
+  deletedAt: string;
+}
+
+export type AuditAction =
+  | 'transaction.created'
+  | 'transaction.edited'
+  | 'transaction.deleted'
+  | 'transaction.restored'
+  | 'csv.imported'
+  | 'backup.restored'
+  | 'account.changed';
+
+export interface AuditEntry {
+  id: string;
+  action: AuditAction;
+  occurredAt: string;
+  recordId?: string;
+  description: string;
+  before?: Partial<Transaction>;
+  after?: Partial<Transaction>;
+}
+
+export interface ImportHistory {
+  id: string;
+  filename: string;
+  importedAt: string;
+  importedCount: number;
+  skippedCount: number;
+  failedCount: number;
+  skippedReasons: string[];
+}
+
+export interface LocalBackup {
+  id: string;
+  createdAt: string;
+  reason: string;
+  payload: string;
+}
+
 export interface Investment {
   id: string;
   name: string;

@@ -33,6 +33,7 @@ export function parseCsv(text: string): string[][] {
     row.push(field);
     if (row.some((cell) => cell.trim())) rows.push(row);
   }
+  if (quoted) throw new Error('CSV contains an unfinished quoted field');
   return rows;
 }
 
@@ -41,17 +42,23 @@ function parseDate(value: string, format: CsvMapping['dateFormat']): string {
   if (parts.length !== 3 || parts.some((part) => !Number.isInteger(part))) throw new Error('Bad date');
   const [year, month, day] = format === 'YMD' ? parts : [parts[2], parts[1], parts[0]];
   if (year < 1900 || month < 1 || month > 12 || day < 1 || day > 31) throw new Error('Bad date');
-  return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+  const date = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+  const parsed = new Date(`${date}T00:00:00Z`);
+  if (parsed.getUTCFullYear() !== year || parsed.getUTCMonth() + 1 !== month || parsed.getUTCDate() !== day) throw new Error('Bad date');
+  return date;
 }
 
 export function importRows(rows: string[][], mapping: CsvMapping, accountId: string) {
   const transactions: Transaction[] = [];
   const skipped: { rowNumber: number; reason: string }[] = [];
   const occurrences = new Map<string, number>();
+  const hasSignedAmount = mapping.amount === undefined
+    || rows.some((row) => (row[mapping.amount!] ?? '').trim().startsWith('-'));
   rows.forEach((row, index) => {
     try {
       const date = parseDate(row[mapping.date] ?? '', mapping.dateFormat);
       const description = (row[mapping.description] ?? '').trim();
+      if (mapping.amount !== undefined && !hasSignedAmount) throw new Error('Amount sign is ambiguous; map debit and credit columns');
       let raw = '';
       if (mapping.amount !== undefined) raw = row[mapping.amount] ?? '';
       else {
@@ -59,9 +66,9 @@ export function importRows(rows: string[][], mapping: CsvMapping, accountId: str
         const credit = (row[mapping.credit ?? -1] ?? '').trim();
         raw = debit ? `-${debit}` : credit;
       }
-      raw = raw.replace(/\s*(Dr|Cr)\s*$/i, (suffix) => suffix.trim().toLowerCase() === 'dr' ? '' : '');
       const isCreditSuffix = /\s*Cr\s*$/i.test(raw);
-      const amount = parseRupees(isCreditSuffix ? raw.replace(/\s*Cr\s*$/i, '') : raw, { allowNegative: true });
+      const normalizedRaw = raw.replace(/\s*(Dr|Cr)\s*$/i, '');
+      const amount = parseRupees(normalizedRaw, { allowNegative: true });
       const normalizedAmount = isCreditSuffix ? Math.abs(amount) : amount;
       if (!description || normalizedAmount === 0) throw new Error('Missing amount');
       const base = `${accountId}|${date}|${normalizedAmount}|${description.toLowerCase().replace(/\s+/g, ' ')}`;
@@ -92,6 +99,32 @@ export function dedupe(existingHashes: Set<string>, incoming: Transaction[]) {
   for (const transaction of incoming) {
     if (transaction.importHash && existingHashes.has(transaction.importHash)) duplicates.push(transaction);
     else fresh.push(transaction);
+  }
+
+  return { fresh, duplicates };
+}
+
+export function transactionImportKey(transaction: Transaction): string {
+  return [
+    transaction.date,
+    transaction.amount,
+    transaction.accountId,
+    transaction.kind,
+    transaction.description.trim().toLowerCase().replace(/\s+/g, ' '),
+  ].join('|');
+}
+
+export function dedupeTransactions(existing: Transaction[], incoming: Transaction[]) {
+  const existingKeys = new Set(existing.map(transactionImportKey));
+  const fresh: Transaction[] = [];
+  const duplicates: { transaction: Transaction; reason: string }[] = [];
+  for (const transaction of incoming) {
+    const key = transactionImportKey(transaction);
+    if (existingKeys.has(key)) duplicates.push({ transaction, reason: 'Matches an existing transaction by date, amount, account, type and description' });
+    else {
+      existingKeys.add(key);
+      fresh.push(transaction);
+    }
   }
   return { fresh, duplicates };
 }
