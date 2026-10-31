@@ -1,9 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { AetherDB } from '../../db/database';
-import type { Account, AuditEntry, ImportHistory, LocalBackup } from '../../db/types';
-import { createAutomaticBackup, exportBackup, importBackup } from '../../db/backup';
-import { recordAudit } from '../../db/activity';
-import { resetDemoData } from '../../db/demo';
+import type { Account, AuditEntry, ImportHistory, LocalBackup } from '../../domain/types';
+import type { FinancialRepository } from '../../repositories/types';
 import {
   dedupeTransactions,
   importRows,
@@ -30,7 +27,7 @@ const exampleCsv = [
   '2026-10-06,Salary,50000.00',
 ].join('\n');
 
-export function Data({ database, isDemo, onWritten }: { database: AetherDB; isDemo: boolean; onWritten: () => Promise<void> }) {
+export function Data({ repository, isDemo, onWritten }: { repository: FinancialRepository; isDemo: boolean; onWritten: () => Promise<void> }) {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [error, setError] = useState('');
   const [status, setStatus] = useState('');
@@ -47,18 +44,18 @@ export function Data({ database, isDemo, onWritten }: { database: AetherDB; isDe
   const [backups, setBackups] = useState<LocalBackup[]>([]);
   const fileInput = useRef<HTMLInputElement>(null);
   const request = useRef(0);
-  const load = useCallback(() => database.accounts.toArray(), [database]);
+  const load = useCallback(() => repository.getAccounts(), [repository]);
   const loadHistory = useCallback(async (requestId: number) => {
     const [nextHistory, nextImports, nextBackups] = await Promise.all([
-      database.audit.orderBy('occurredAt').reverse().limit(20).toArray(),
-      database.imports.orderBy('importedAt').reverse().limit(10).toArray(),
-      database.backups.orderBy('createdAt').reverse().limit(5).toArray(),
+      repository.getRecentAudit(20),
+      repository.getRecentImports(10),
+      repository.getRecentBackups(5),
     ]);
     if (requestId !== request.current) return;
     setHistory(nextHistory);
     setImports(nextImports);
     setBackups(nextBackups);
-  }, [database]);
+  }, [repository]);
 
   useEffect(() => {
     const requestId = ++request.current;
@@ -91,10 +88,7 @@ export function Data({ database, isDemo, onWritten }: { database: AetherDB; isDe
   const addAccount = async () => {
     try {
       const account = { id: crypto.randomUUID(), name: form.name.trim(), type: form.type, openingBalance: parseRupees(form.openingBalance), openingDate: form.openingDate };
-      await database.transaction('rw', [database.accounts, database.audit], async () => {
-        await database.accounts.add(account);
-        await recordAudit(database, 'account.changed', `Added account ${form.name.trim()}`, account.id);
-      });
+      await repository.addAccount(account);
       await onWritten();
       await refresh();
       setStatus('Account added');
@@ -156,10 +150,8 @@ export function Data({ database, isDemo, onWritten }: { database: AetherDB; isDe
     setImporting(true);
     setError('');
     try {
-      const { fresh, duplicates } = dedupeTransactions(await database.transactions.toArray(), preview.transactions);
-      await database.transaction('rw', [database.transactions, database.imports, database.audit], async () => {
-        await database.transactions.bulkAdd(fresh);
-        await database.imports.add({
+      const { fresh, duplicates } = dedupeTransactions(await repository.getTransactions(), preview.transactions);
+      await repository.importTransactions(fresh, {
           id: crypto.randomUUID(),
           filename: csvName,
           importedAt: new Date().toISOString(),
@@ -167,10 +159,8 @@ export function Data({ database, isDemo, onWritten }: { database: AetherDB; isDe
           skippedCount: duplicates.length + preview.skipped.length,
           failedCount: 0,
           skippedReasons: [...duplicates.map((item) => item.reason), ...preview.skipped.map((item) => `Row ${item.rowNumber}: ${item.reason}`)],
-        });
-        await recordAudit(database, 'csv.imported', `Imported ${fresh.length} transaction(s) from ${csvName}`);
       });
-      await createAutomaticBackup(database, 'CSV import');
+      await repository.createAutomaticBackup('CSV import');
       await refresh();
       setStatus(`Import complete: ${fresh.length} imported, ${duplicates.length + preview.skipped.length} skipped, 0 failed.`);
       clearCsv();
@@ -192,14 +182,14 @@ export function Data({ database, isDemo, onWritten }: { database: AetherDB; isDe
 
   const download = async () => {
     try {
-      const blob = new Blob([await exportBackup(database)], { type: 'application/json' });
+      const blob = new Blob([await repository.exportBackup()], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
       link.download = `aether-backup-${new Date().toISOString().slice(0, 10)}.json`;
       link.click();
       URL.revokeObjectURL(url);
-      await createAutomaticBackup(database, 'Manual backup');
+      await repository.createAutomaticBackup('Manual backup');
       await refresh();
     } catch {
       setError('Could not create the backup.');
@@ -209,7 +199,7 @@ export function Data({ database, isDemo, onWritten }: { database: AetherDB; isDe
   const restoreLocal = async (backup: LocalBackup) => {
     if (isDemo || !window.confirm(`Restore the local backup from ${new Date(backup.createdAt).toLocaleString()}?`)) return;
     try {
-      await importBackup(database, backup.payload);
+      await repository.importBackup(backup.payload);
     await onWritten();
     await refresh();
       setStatus('Local backup restored.');
@@ -221,8 +211,8 @@ export function Data({ database, isDemo, onWritten }: { database: AetherDB; isDe
   const restore = async (file: File | undefined) => {
     if (!file || isDemo || !window.confirm('This replaces everything in My Data. Continue?')) return;
     try {
-      await importBackup(database, await file.text());
-      await createAutomaticBackup(database, 'Backup restored');
+      await repository.importBackup(await file.text());
+      await repository.createAutomaticBackup('Backup restored');
       await onWritten();
       await refresh();
       setStatus('Backup restored');
@@ -234,7 +224,7 @@ export function Data({ database, isDemo, onWritten }: { database: AetherDB; isDe
   const reset = async () => {
     if (!isDemo || !window.confirm('Reset Demo Data to its original sample state? My Data will not be changed.')) return;
     try {
-      await resetDemoData();
+      await repository.reset();
       await onWritten();
       await refresh();
       setStatus('Demo Data reset. My Data was not changed.');

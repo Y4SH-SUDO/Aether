@@ -1,4 +1,4 @@
-import type { Money } from '../db/types';
+import type { Money } from '../domain/types';
 import { calculateEmi } from './emi';
 
 interface PayoffResult {

@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { AetherDB } from '../../db/database';
-import type { Investment, InvestmentTrade, Valuation } from '../../db/types';
+import type { Investment, InvestmentTrade, Valuation } from '../../domain/types';
+import type { FinancialRepository } from '../../repositories/types';
 import { investmentSummary } from '../../engine/investments';
 import { formatRupees } from '../../engine/format';
 import { parseOptionalRupees, parseRupees } from '../../engine/money';
 
-export function Investments({ database, onWritten }: { database: AetherDB; onWritten: () => Promise<void> }) {
+export function Investments({ repository, onWritten }: { repository: FinancialRepository; onWritten: () => Promise<void> }) {
   const [investments, setInvestments] = useState<Investment[]>([]);
   const [trades, setTrades] = useState<InvestmentTrade[]>([]);
   const [valuations, setValuations] = useState<Valuation[]>([]);
@@ -14,7 +14,7 @@ export function Investments({ database, onWritten }: { database: AetherDB; onWri
   const [form, setForm] = useState({ name: '', type: 'mutual_fund' as Investment['type'], symbol: '' });
   const [trade, setTrade] = useState({ investmentId: '', date: '', kind: 'buy' as InvestmentTrade['kind'], units: '', amount: '', fees: '' });
   const [price, setPrice] = useState({ investmentId: '', date: '', unitPrice: '' });
-  const load = useCallback(() => Promise.all([database.investments.toArray(), database.trades.toArray(), database.valuations.toArray()]), [database]);
+  const load = useCallback(() => Promise.all([repository.getInvestments(), repository.getTrades(), repository.getValuations()]), [repository]);
   const request = useRef(0);
   const applyLoaded = (nextInvestments: Investment[], nextTrades: InvestmentTrade[], nextValuations: Valuation[]) => {
     setInvestments(nextInvestments); setTrades(nextTrades); setValuations(nextValuations);
@@ -46,9 +46,9 @@ export function Investments({ database, onWritten }: { database: AetherDB; onWri
       if (requestId === request.current) setError(e instanceof Error ? e.message : 'Could not load investments');
     }
   };
-  const saveInvestment = async () => { try { await database.investments.add({ id: crypto.randomUUID(), name: form.name.trim(), type: form.type, symbol: form.symbol.trim() || undefined }); await refresh(); await onWritten(); } catch (e: unknown) { setError(e instanceof Error ? e.message : 'Could not save investment'); } };
-  const saveTrade = async () => { try { await database.trades.add({ id: crypto.randomUUID(), investmentId: trade.investmentId, date: trade.date, kind: trade.kind, units: Number(trade.units), amount: parseRupees(trade.amount), fees: parseOptionalRupees(trade.fees) }); await refresh(); await onWritten(); } catch (e: unknown) { setError(e instanceof Error ? e.message : 'Could not save trade'); } };
-  const savePrice = async () => { try { await database.valuations.add({ id: crypto.randomUUID(), investmentId: price.investmentId, date: price.date, unitPrice: parseRupees(price.unitPrice), quality: 'manual' }); await refresh(); await onWritten(); } catch (e: unknown) { setError(e instanceof Error ? e.message : 'Could not save valuation'); } };
+  const saveInvestment = async () => { try { await repository.addInvestment({ id: crypto.randomUUID(), name: form.name.trim(), type: form.type, symbol: form.symbol.trim() || undefined }); await refresh(); await onWritten(); } catch (e: unknown) { setError(e instanceof Error ? e.message : 'Could not save investment'); } };
+  const saveTrade = async () => { try { await repository.addTrade({ id: crypto.randomUUID(), investmentId: trade.investmentId, date: trade.date, kind: trade.kind, units: Number(trade.units), amount: parseRupees(trade.amount), fees: parseOptionalRupees(trade.fees) }); await refresh(); await onWritten(); } catch (e: unknown) { setError(e instanceof Error ? e.message : 'Could not save trade'); } };
+  const savePrice = async () => { try { await repository.addValuation({ id: crypto.randomUUID(), investmentId: price.investmentId, date: price.date, unitPrice: parseRupees(price.unitPrice), quality: 'manual' }); await refresh(); await onWritten(); } catch (e: unknown) { setError(e instanceof Error ? e.message : 'Could not save valuation'); } };
   const summary = investmentSummary(investments, trades, valuations, '2026-12');
   return <section className="space-y-8"><h2 className="text-xs uppercase tracking-[0.18em] text-muted">Investments</h2>{error ? <p className="text-sm italic text-muted">{error}</p> : null}{investments.length === 0 ? <p className="text-sm italic text-muted">No investments yet.</p> : <div className="divide-y divide-rule border-y border-rule">{summary.holdings.map((holding) => <button type="button" key={holding.investmentId} onClick={() => setSelected(holding.investmentId)} className="flex w-full justify-between py-4 text-left"><span>{holding.name} <span className="text-muted">· {investments.find((item) => item.id === holding.investmentId)?.type} · {holding.units} units</span></span><span>{formatRupees(holding.value)}</span></button>)}</div>}
     <div className="border-t border-rule pt-7"><h3 className="text-xs uppercase tracking-[0.18em] text-muted">Add investment</h3><div className="mt-5 grid gap-3 sm:grid-cols-3"><input placeholder="Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="border-b border-rule bg-transparent py-2" /><select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value as Investment['type'] })} className="border-b border-rule bg-transparent py-2"><option>mutual_fund</option><option>stock</option><option>etf</option><option>fd</option><option>bond</option><option>other</option></select><input placeholder="Symbol" value={form.symbol} onChange={(e) => setForm({ ...form, symbol: e.target.value })} className="border-b border-rule bg-transparent py-2" /></div><button type="button" onClick={() => void saveInvestment()} className="mt-5 text-sm underline underline-offset-4">Add investment</button></div>

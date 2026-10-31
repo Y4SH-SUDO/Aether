@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { Loan } from '../db/types';
+import type { Loan } from '../domain/types';
 import { loanStillOwed, loanSummary } from './loans';
 
 const l1: Loan = {

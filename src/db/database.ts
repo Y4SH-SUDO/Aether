@@ -52,5 +52,3 @@ export class AetherDB extends Dexie {
     });
   }
 }
-
-export const db = new AetherDB();

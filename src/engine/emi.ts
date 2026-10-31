@@ -1,4 +1,4 @@
-import type { Money } from '../db/types';
+import type { Money } from '../domain/types';
 
 export function calculateEmi(
   principal: Money,

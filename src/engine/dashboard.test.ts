@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { Account, Loan, Money, Transaction } from '../db/types';
+import type { Account, Loan, Money, Transaction } from '../domain/types';
 import { buildDashboard, dataMonthRange, shiftMonth } from './dashboard';
 
 const makeTx = ({

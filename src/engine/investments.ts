@@ -3,7 +3,7 @@ import type {
   InvestmentTrade,
   Money,
   Valuation,
-} from '../db/types';
+} from '../domain/types';
 
 interface InvestmentHolding {
   investmentId: string;

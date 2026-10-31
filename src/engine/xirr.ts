@@ -1,4 +1,4 @@
-import type { Investment, InvestmentTrade, Money, Valuation, ISODate } from '../db/types';
+import type { Investment, InvestmentTrade, Money, Valuation, ISODate } from '../domain/types';
 import { investmentSummary } from './investments';
 
 interface CashFlow {

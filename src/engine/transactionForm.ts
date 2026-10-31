@@ -1,4 +1,4 @@
-import type { Transaction } from '../db/types';
+import type { Transaction } from '../domain/types';
 import { parseRupees } from './money';
 
 type TransactionInput = Omit<Pick<Transaction, 'accountId' | 'date' | 'description' | 'kind' | 'categoryId'>, never> & {

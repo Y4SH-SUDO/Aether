@@ -1,11 +1,10 @@
 import { useState } from 'react';
-import { getActiveDb, getMode, setMode, type DataMode } from './db/active';
+import { getActiveRepository, getMode, setMode, type DataMode } from './db/active';
 import { Dashboard } from './features/dashboard/Dashboard';
 import { Transactions } from './features/transactions/Transactions';
 import { Data } from './features/data/Data';
 import { Loans } from './features/loans/Loans';
 import { Investments } from './features/investments/Investments';
-import { createAutomaticBackup } from './db/backup';
 
 type Tab = 'overview' | 'transactions' | 'loans' | 'investments' | 'data';
 
@@ -13,7 +12,7 @@ function App() {
   const [mode, setCurrentMode] = useState<DataMode>(getMode);
   const [tab, setTab] = useState<Tab>('overview');
   const [revision, setRevision] = useState(0);
-  const database = getActiveDb(mode);
+  const repository = getActiveRepository(mode);
   const changeMode = (next: DataMode) => {
     if (next === mode) return;
     if (!window.confirm('Switching datasets will discard any unsaved form input. Continue?')) return;
@@ -22,7 +21,7 @@ function App() {
     setTab('overview');
   };
   const onWritten = async () => {
-    await createAutomaticBackup(database, 'Meaningful data change');
+    await repository.createAutomaticBackup('Meaningful data change');
     setRevision((value) => value + 1);
   };
   void revision;
@@ -40,11 +39,11 @@ function App() {
       </header>
       <p className="mt-4 text-sm italic text-muted">{mode === 'demo' ? 'Demo uses sample data.' : 'My Data uses your own local financial data.'}</p>
       <div className="mt-10">
-        {tab === 'overview' ? <Dashboard key={`${mode}-${revision}`} database={database} isDemo={mode === 'demo'} onNavigate={setTab} /> : null}
-        {tab === 'transactions' ? <Transactions database={database} onWritten={onWritten} /> : null}
-        {tab === 'loans' ? <Loans database={database} onWritten={onWritten} /> : null}
-        {tab === 'investments' ? <Investments database={database} onWritten={onWritten} /> : null}
-        {tab === 'data' ? <Data database={database} isDemo={mode === 'demo'} onWritten={onWritten} /> : null}
+        {tab === 'overview' ? <Dashboard key={`${mode}-${revision}`} repository={repository} isDemo={mode === 'demo'} onNavigate={setTab} /> : null}
+        {tab === 'transactions' ? <Transactions repository={repository} onWritten={onWritten} /> : null}
+        {tab === 'loans' ? <Loans repository={repository} onWritten={onWritten} /> : null}
+        {tab === 'investments' ? <Investments repository={repository} onWritten={onWritten} /> : null}
+        {tab === 'data' ? <Data repository={repository} isDemo={mode === 'demo'} onWritten={onWritten} /> : null}
       </div>
     </main>
   );

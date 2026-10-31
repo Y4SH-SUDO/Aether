@@ -1,14 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { AetherDB } from '../../db/database';
-import type { Account, Category, Transaction } from '../../db/types';
+import type { FinancialRepository } from '../../repositories/types';
+import type { Account, Category, Transaction } from '../../domain/types';
 import { dataMonthRange } from '../../engine/dashboard';
 import { buildTransaction, createTransferPair } from '../../engine/transactionForm';
 import { formatRupees } from '../../engine/format';
 import { MonthSwitcher } from '../../components/MonthSwitcher';
-import { deleteTransaction, recordCreatedTransaction, restoreTransaction } from '../../db/activity';
 import { findPotentialDuplicates, type DuplicateCandidate } from '../../engine/duplicateDetection';
 
-export function Transactions({ database, onWritten }: { database: AetherDB; onWritten: () => Promise<void> }) {
+export function Transactions({ repository, onWritten }: { repository: FinancialRepository; onWritten: () => Promise<void> }) {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -22,8 +21,8 @@ export function Transactions({ database, onWritten }: { database: AetherDB; onWr
   const [undoId, setUndoId] = useState<string | null>(null);
   const [undoMessage, setUndoMessage] = useState('');
   const load = useCallback(() => Promise.all([
-    database.accounts.toArray(), database.categories.toArray(), database.transactions.toArray(),
-  ]), [database]);
+    repository.getAccounts(), repository.getCategories(), repository.getTransactions(),
+  ]), [repository]);
   const request = useRef(0);
   const applyLoaded = (nextAccounts: Account[], nextCategories: Category[], nextTransactions: Transaction[]) => {
     setAccounts(nextAccounts); setCategories(nextCategories); setTransactions(nextTransactions);
@@ -73,10 +72,7 @@ export function Transactions({ database, onWritten }: { database: AetherDB; onWr
         setSaving(false);
         return;
       }
-      await database.transaction('rw', [database.transactions, database.audit], async () => {
-        await database.transactions.add(tx);
-        await recordCreatedTransaction(database, tx);
-      });
+      await repository.addTransaction(tx);
       await refresh(); await onWritten();
       setForm({ accountId: form.accountId, date: '', description: '', rupees: '', direction: 'out', kind: 'expense', categoryId: '' });
       setStatus('Transaction added');
@@ -86,7 +82,7 @@ export function Transactions({ database, onWritten }: { database: AetherDB; onWr
   };
   const remove = async (tx: Transaction) => {
     try {
-      await deleteTransaction(database, tx);
+      await repository.deleteTransaction(tx);
       await refresh();
       await onWritten();
       setUndoId(tx.id);
@@ -101,7 +97,7 @@ export function Transactions({ database, onWritten }: { database: AetherDB; onWr
   };
   const undo = async () => {
     if (!undoId) return;
-    const restored = await restoreTransaction(database, undoId);
+    const restored = await repository.restoreTransaction(undoId);
     if (!restored) {
       setUndoMessage('Undo is no longer available for that transaction.');
       setUndoId(null);
@@ -144,12 +140,12 @@ export function Transactions({ database, onWritten }: { database: AetherDB; onWr
         {undoMessage ? <p className="mt-3 text-sm text-muted" role="status">{undoMessage} {undoId ? <button type="button" onClick={() => void undo()} className="ml-2 underline underline-offset-4">Undo</button> : null}</p> : null}
         <button type="submit" disabled={saving} className="mt-5 text-sm underline underline-offset-4 disabled:cursor-not-allowed disabled:text-muted">{saving ? 'Saving…' : 'Add transaction'}</button>
       </form>
-      <TransferForm key={accounts.map((account) => account.id).join('|')} database={database} accounts={accounts} onWritten={async () => { await refresh(); await onWritten(); }} />
+      <TransferForm key={accounts.map((account) => account.id).join('|')} repository={repository} accounts={accounts} onWritten={async () => { await refresh(); await onWritten(); }} />
     </section>
   );
 }
 
-function TransferForm({ database, accounts, onWritten }: { database: AetherDB; accounts: Account[]; onWritten: () => Promise<void> }) {
+function TransferForm({ repository, accounts, onWritten }: { repository: FinancialRepository; accounts: Account[]; onWritten: () => Promise<void> }) {
   const [from, setFrom] = useState(accounts[0]?.id ?? '');
   const [to, setTo] = useState(accounts[1]?.id ?? '');
   const [date, setDate] = useState('');
@@ -160,5 +156,5 @@ function TransferForm({ database, accounts, onWritten }: { database: AetherDB; a
     <select value={fromValue} onChange={(e) => setFrom(e.target.value)} className="border-b border-rule bg-transparent py-2">{accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select>
     <select value={toValue} onChange={(e) => setTo(e.target.value)} className="border-b border-rule bg-transparent py-2">{accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select>
     <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="border-b border-rule bg-transparent py-2" /><input placeholder="Amount in rupees" value={rupees} onChange={(e) => setRupees(e.target.value)} className="border-b border-rule bg-transparent py-2" />
-  </div><button type="button" onClick={async () => { const pair = createTransferPair({ fromAccountId: fromValue, toAccountId: toValue, date, rupees }); await database.transactions.bulkAdd(pair); await onWritten(); }} className="mt-5 text-sm underline underline-offset-4">Move money</button></div>;
+  </div><button type="button" onClick={async () => { const pair = createTransferPair({ fromAccountId: fromValue, toAccountId: toValue, date, rupees }); await repository.createTransfer(pair); await onWritten(); }} className="mt-5 text-sm underline underline-offset-4">Move money</button></div>;
 }

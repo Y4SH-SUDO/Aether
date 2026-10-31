@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { Account, Investment, InvestmentTrade, Loan, Transaction, Valuation } from '../db/types';
+import type { Account, Investment, InvestmentTrade, Loan, Transaction, Valuation } from '../domain/types';
 import { netWorth } from './networth';
 
 const accounts: Account[] = [

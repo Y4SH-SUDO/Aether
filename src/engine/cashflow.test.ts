@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { Account, Money, Transaction } from '../db/types';
+import type { Account, Money, Transaction } from '../domain/types';
 import {
   accountBalance,
   expensesByCategory,

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { Investment, InvestmentTrade } from '../db/types';
+import type { Investment, InvestmentTrade } from '../domain/types';
 import { investmentReturn, xirrPercent } from './xirr';
 
 describe('xirrPercent', () => {

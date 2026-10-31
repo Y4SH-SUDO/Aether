@@ -1,4 +1,4 @@
-import type { Account, Money, Transaction } from '../db/types';
+import type { Account, Money, Transaction } from '../domain/types';
 
 export interface MonthlyCashFlow {
   income: Money;

@@ -1,4 +1,4 @@
-import type { Money } from '../db/types';
+import type { Money } from '../domain/types';
 
 const rupeeFormatter = new Intl.NumberFormat('en-IN', {
   style: 'currency',

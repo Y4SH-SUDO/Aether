@@ -3,8 +3,8 @@ import { CategoryBars } from '../../components/CategoryBars';
 import { MoneyInOutChart } from '../../components/MoneyInOutChart';
 import { MonthSwitcher } from '../../components/MonthSwitcher';
 import { StatTile } from '../../components/StatTile';
-import { ensureDemoData } from '../../db/demo';
-import type { AetherDB } from '../../db/database';
+import { ensureActiveData } from '../../db/active';
+import type { FinancialRepository } from '../../repositories/types';
 import type {
   Account,
   Category,
@@ -13,7 +13,7 @@ import type {
   Loan,
   Transaction,
   Valuation,
-} from '../../db/types';
+} from '../../domain/types';
 import { buildDashboard, dataMonthRange } from '../../engine/dashboard';
 import { formatRupees } from '../../engine/format';
 import { investmentSummary } from '../../engine/investments';
@@ -60,7 +60,7 @@ function useTheme() {
   return { theme, toggle: () => setTheme((current) => current === 'dark' ? 'light' : 'dark') };
 }
 
-export function Dashboard({ database, isDemo, onNavigate }: { database: AetherDB; isDemo: boolean; onNavigate?: (tab: 'transactions' | 'data') => void }) {
+export function Dashboard({ repository, isDemo, onNavigate }: { repository: FinancialRepository; isDemo: boolean; onNavigate?: (tab: 'transactions' | 'data') => void }) {
   const [data, setData] = useState<DemoData | null>(null);
   const [error, setError] = useState('');
   const [month, setMonth] = useState<string | null>(null);
@@ -71,15 +71,10 @@ export function Dashboard({ database, isDemo, onNavigate }: { database: AetherDB
 
   useEffect(() => {
     const requestId = ++request.current;
-    void (isDemo ? ensureDemoData() : Promise.resolve()).then(async () => {
+    void ensureActiveData(isDemo ? 'demo' : 'mine').then(async () => {
       const [accounts, categories, transactions, loans, investments, trades, valuations] = await Promise.all([
-        database.accounts.toArray(),
-        database.categories.toArray(),
-        database.transactions.toArray(),
-        database.loans.toArray(),
-        database.investments.toArray(),
-        database.trades.toArray(),
-        database.valuations.toArray(),
+        repository.getAccounts(), repository.getCategories(), repository.getTransactions(),
+        repository.getLoans(), repository.getInvestments(), repository.getTrades(), repository.getValuations(),
       ]);
       if (requestId === request.current) {
         setData({ accounts, categories, transactions, loans, investments, trades, valuations });
@@ -90,7 +85,7 @@ export function Dashboard({ database, isDemo, onNavigate }: { database: AetherDB
       if (requestId === request.current) setError('Could not load dashboard data. Try again.');
     });
     return () => { request.current += 1; };
-  }, [database, isDemo, reload]);
+  }, [repository, isDemo, reload]);
 
   const dashboard = data && month ? buildDashboard(data, month) : null;
   const range = data ? dataMonthRange(data.transactions) : null;

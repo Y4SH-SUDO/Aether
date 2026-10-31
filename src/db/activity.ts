@@ -1,13 +1,13 @@
 import type { AetherDB } from './database';
-import type { AuditAction, AuditEntry, Transaction } from './types';
+import type { AuditAction, AuditEntry, AuditSnapshot, Transaction } from './types';
 
 export async function recordAudit(
   database: AetherDB,
   action: AuditAction,
   description: string,
   recordId?: string,
-  before?: Partial<Transaction>,
-  after?: Partial<Transaction>,
+  before?: AuditSnapshot,
+  after?: AuditSnapshot,
 ): Promise<void> {
   const entry: AuditEntry = {
     id: crypto.randomUUID(),

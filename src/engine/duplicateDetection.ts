@@ -1,4 +1,4 @@
-import type { Transaction } from '../db/types';
+import type { Transaction } from '../domain/types';
 
 export interface DuplicateCandidate {
   transaction: Transaction;

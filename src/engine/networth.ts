@@ -1,4 +1,4 @@
-import type { Account, Investment, InvestmentTrade, Loan, Transaction, Valuation, Money } from '../db/types';
+import type { Account, Investment, InvestmentTrade, Loan, Transaction, Valuation, Money } from '../domain/types';
 import { totalBalance } from './cashflow';
 import { investmentSummary } from './investments';
 import { loanSummary } from './loans';

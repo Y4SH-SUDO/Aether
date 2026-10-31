@@ -1,4 +1,4 @@
-import type { Loan, Money } from '../db/types';
+import type { Loan, Money } from '../domain/types';
 import { amortizationSchedule } from './amortization';
 
 export interface LoanSummary {

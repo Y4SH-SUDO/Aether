@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { Transaction } from '../db/types';
+import type { Transaction } from '../domain/types';
 import { dedupe, dedupeTransactions, importRows, matchTransfers, parseCsv } from './csvImport';
 
 const mapping = { date: 0, description: 1, debit: 2, credit: 3, dateFormat: 'DMY' as const };

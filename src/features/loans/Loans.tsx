@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { AetherDB } from '../../db/database';
-import type { Loan } from '../../db/types';
+import type { Loan } from '../../domain/types';
+import type { FinancialRepository } from '../../repositories/types';
 import { amortizationSchedule } from '../../engine/amortization';
 import { calculateEmi } from '../../engine/emi';
 import { loanStillOwed } from '../../engine/loans';
@@ -10,13 +10,13 @@ import { formatRupees } from '../../engine/format';
 
 const products = ['home', 'education', 'personal', 'vehicle', 'other'] as const;
 
-export function Loans({ database, onWritten }: { database: AetherDB; onWritten: () => Promise<void> }) {
+export function Loans({ repository, onWritten }: { repository: FinancialRepository; onWritten: () => Promise<void> }) {
   const [loans, setLoans] = useState<Loan[]>([]);
   const [error, setError] = useState('');
   const [selected, setSelected] = useState<Loan | null>(null);
   const [extra, setExtra] = useState('');
   const [form, setForm] = useState({ name: '', lender: '', product: 'other' as Loan['product'], principal: '', rate: '', startDate: '', tenure: '12', emi: '', outstanding: '', asOf: '' });
-  const load = useCallback(() => database.loans.toArray(), [database]);
+  const load = useCallback(() => repository.getLoans(), [repository]);
   const request = useRef(0);
   useEffect(() => {
     const requestId = ++request.current;
@@ -35,7 +35,7 @@ export function Loans({ database, onWritten }: { database: AetherDB; onWritten: 
     try {
       const principal = parseRupees(form.principal);
       const emi = form.emi ? parseRupees(form.emi) : calculateEmi(principal, Number(form.rate), Number(form.tenure));
-      await database.loans.put({ id: selected?.id ?? crypto.randomUUID(), name: form.name.trim(), lender: form.lender.trim() || undefined, product: form.product, principal, annualRatePercent: Number(form.rate), startDate: form.startDate, tenureMonths: Number(form.tenure), emi, knownOutstanding: form.outstanding ? { amount: parseRupees(form.outstanding), asOf: form.asOf } : undefined });
+      await repository.saveLoan({ id: selected?.id ?? crypto.randomUUID(), name: form.name.trim(), lender: form.lender.trim() || undefined, product: form.product, principal, annualRatePercent: Number(form.rate), startDate: form.startDate, tenureMonths: Number(form.tenure), emi, knownOutstanding: form.outstanding ? { amount: parseRupees(form.outstanding), asOf: form.asOf } : undefined });
       const nextLoans = await load();
       if (requestId === request.current) {
         setSelected(null); setLoans(nextLoans); setError(''); await onWritten();

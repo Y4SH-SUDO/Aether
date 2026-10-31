@@ -1,4 +1,4 @@
-import type { Account, Loan, Money, Transaction } from '../db/types';
+import type { Account, Loan, Money, Transaction } from '../domain/types';
 import { expensesByCategory, monthlyCashFlow, totalBalance } from './cashflow';
 
 export interface DashboardCategory {

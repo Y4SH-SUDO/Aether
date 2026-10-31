@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { findPotentialDuplicates } from './duplicateDetection';
-import type { Transaction } from '../db/types';
+import type { Transaction } from '../domain/types';
 
 const make = (id: string, description: string, amount = -1000): Transaction => ({
   id, accountId: 'a', date: '2026-10-30', amount, description, kind: 'expense', categoryId: null, quality: 'manual',
