@@ -5,6 +5,7 @@ import { Transactions } from './features/transactions/Transactions';
 import { Data } from './features/data/Data';
 import { Loans } from './features/loans/Loans';
 import { Investments } from './features/investments/Investments';
+import { DesktopRuntimeStatus } from './components/DesktopRuntimeStatus';
 
 type Tab = 'overview' | 'transactions' | 'loans' | 'investments' | 'data';
 
@@ -37,6 +38,7 @@ function App() {
           {(['overview', 'transactions', 'loans', 'investments', 'data'] as const).map((item) => <button key={item} type="button" onClick={() => setTab(item)} className={tab === item ? 'underline underline-offset-4' : 'text-muted'}>{item[0].toUpperCase() + item.slice(1)}</button>)}
         </nav>
       </header>
+      <DesktopRuntimeStatus />
       <p className="mt-4 text-sm italic text-muted">{mode === 'demo' ? 'Demo uses sample data.' : 'My Data uses your own local financial data.'}</p>
       <div className="mt-10">
         {tab === 'overview' ? <Dashboard key={`${mode}-${revision}`} repository={repository} isDemo={mode === 'demo'} onNavigate={setTab} /> : null}
